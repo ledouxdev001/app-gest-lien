@@ -1,0 +1,62 @@
+services:
+
+  # ── MySQL ────────────────────────────────────────────────────
+  db:
+    image: mysql:8.0
+    container_name: linkshub_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_secret
+      MYSQL_DATABASE: linkshub
+      MYSQL_USER: linkshub
+      MYSQL_PASSWORD: linkshub_pass
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./data/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ulinkshub", "-plinkshub_pass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Python / FastAPI ─────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: linkshub_api
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: linkshub
+      DB_PASSWORD: linkshub_pass
+      DB_NAME: linkshub
+      JWT_SECRET: change_this_in_production
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      PORT: 8000
+    ports:
+      - "8000:8000"
+
+  # ── React / Nginx ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""    # vide = même domaine, Nginx proxy vers backend
+    container_name: linkshub_web
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  mysql_data:
